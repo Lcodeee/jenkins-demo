@@ -34,19 +34,39 @@ pipeline {
         }
         
         stage('Run Container') {
-            steps {
-                echo 'Running container for testing...'
-                script {
-                    sh '''
-                        docker rm -f test-container 2>/dev/null || true
-                        docker run -d --name test-container -p 8080:80 ${DOCKER_IMAGE}:${DOCKER_TAG}
-                        sleep 3
-                        curl -f http://localhost:8080 || exit 1
-                        echo "Container is running successfully!"
-                    '''
-                }
-            }
+    steps {
+        echo 'Running container for testing...'
+        script {
+            sh '''
+                # Remove existing container if present
+                docker rm -f test-container 2>/dev/null || true
+                
+                # Start container
+                docker run -d --name test-container -p 8081:80 ${DOCKER_IMAGE}:${DOCKER_TAG}
+
+                echo "Waiting for container to become ready..."
+
+                # Retry up to 30 seconds
+                for i in {1..30}; do
+                    if curl -fs http://localhost:8081 > /dev/null; then
+                        echo "Container is responding!"
+                        break
+                    fi
+                    echo "Still waiting... ($i/30)"
+                    sleep 1
+                done
+
+                # Final check
+                if ! curl -fs http://localhost:8081 > /dev/null; then
+                    echo "Container failed to start after waiting."
+                    exit 1
+                fi
+
+                echo "Container is running successfully!"
+            '''
         }
+    }
+}
         
         stage('Cleanup') {
             steps {
